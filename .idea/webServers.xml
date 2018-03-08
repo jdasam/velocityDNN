@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="ssh://jdasam@mac-chopin2.kaist.ac.kr:44455/usr/bin/python" name="chopin2 docker" url="http://mac-chopin2.kaist.ac.kr">
+        <fileTransfer host="mac-chopin2.kaist.ac.kr" port="44455" rootFolder="/home/jdasam" accessType="SFTP">
+          <option name="port" value="44455" />
+        </fileTransfer>
+      </webServer>
+      <webServer id="39653962-6ebb-4bb2-8cbb-ba69dac26166" name="TK docker, dasaem" url="http://mac-chopin2.kaist.ac.kr">
+        <fileTransfer host="mac-chopin2.kaist.ac.kr" port="33355" rootFolder="/home/jdasam" accessType="SFTP">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" />
+          </advancedOptions>
+          <option name="port" value="33355" />
+        </fileTransfer>
+      </webServer>
+      <webServer id="c109cad8-9e0a-4350-b5a3-e61c58e731fa" name="chopin4 docker" url="http://mac-chopin4.kaist.ac.kr">
+        <fileTransfer host="mac-chopin4.kaist.ac.kr" port="33355" accessType="SFTP">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" />
+          </advancedOptions>
+          <option name="port" value="33355" />
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>
