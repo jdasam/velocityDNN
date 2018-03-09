@@ -1,5 +1,58 @@
 import numpy as np
 import h5py
+import scipy.io as sio
+from scipy.stats import norm
+import tensorflow as tf
+import random
+
+def _bytes_feature(value):
+    return tf.train.Feature(bytes_list=tf.train.BytesList(value=value))
+
+
+def _int64_feature(value):
+    return tf.train.Feature(int64_list=tf.train.Int64List(value=value))
+
+
+def _float_feature(value):
+    return tf.train.Feature(float_list=tf.train.FloatList(value=value))
+
+
+def convert_to(whole_file, save_folder):
+
+    def writer(set_name):
+        temp_writer = tf.python_io.TFRecordWriter(save_folder + '/' + '{}_.tfrecords'.
+                                         format(set_name))
+        return temp_writer
+
+    t_writer = writer('train')
+    v_writer = writer('valid')
+    te_writer = writer('test')
+    whole_x, whole_y = loadTrainSet(whole_file)
+    print whole_x[1,2,3]
+    n_data = whole_x.shape[0]
+    print whole_x.shape, whole_y.shape
+    idx = range(n_data)
+    random.shuffle(idx)
+    n_train = int(n_data*0.6)
+    n_valid = int(n_data*0.2)
+
+    for n in range(n_data):
+        if n % 5000 == 0:
+            print n
+        data_x = whole_x[idx[n], :, :]
+        data_y = whole_y[idx[n],:]
+        example = tf.train.Example(features=tf.train.Features(feature={
+            'feature': _float_feature(data_x.flatten()),
+            'label': _float_feature(data_y.flatten())}))
+        if n <= n_train:
+            t_writer.write(example.SerializeToString())
+        elif n <= n_train + n_valid:
+            v_writer.write(example.SerializeToString())
+        else:
+            te_writer.write(example.SerializeToString())
+    t_writer.close()
+    v_writer.close()
+    te_writer.close()
 
 
 def loadTrainSet(filename):
@@ -21,8 +74,8 @@ def loadTrainSet(filename):
                     spec_array = np.transpose(np.asarray(mat_contents[spec_cell[j, dataSize]]))
                     if not spec_array.any():
                         break
-                    tempX = spec_array.reshape((445, 14, 1))
-                    dataSetX.append(tempX/np.mean(tempX))
+                    tempX = spec_array.reshape((445, 14))
+                    dataSetX.append(tempX/np.amax(tempX))
                     # dataSetX.append(tempX)
                     # dataSetY.append(np.asarray(vel_cel[setIndex, foldIndex][0, 2][i, j].reshape(1)))
                     # print('gt_Vel:' ,np.asarray(gt_vel_cell[j,dataSize]))
@@ -65,13 +118,14 @@ def unison_shuffled_copies(a,b):
 
 def loadPiece(fileName):
     test_contents = sio.loadmat(fileName)
+    pieceSetSize = len(test_contents['onsetClusterArray'][0])
 
     pieceX = []
     pieceY = []
     for i in range(pieceSetSize):
         # print(test_contents['onsetClusterArray'][0][i])
-        tempX = np.asarray(test_contents['onsetClusterArray'][0][i]).reshape((445, 14, 1))
-        pieceX.append(tempX / np.mean(tempX))
+        tempX = np.asarray(test_contents['onsetClusterArray'][0][i]).reshape((445, 14,1))
+        pieceX.append(tempX / np.amax(tempX))
         # pieceY.append(np.asarray(test_contents['onsetMatchedVel'][0][i]).reshape(1))
         pieceY.append(velocityToOneHot(test_contents['onsetMatchedVel'][0][i]).reshape(13))
 
@@ -96,19 +150,23 @@ def velocityToOneHot(velocity):
     # print(velocity)
     # print('binaryIndexof Result: ', index)
 
-
-    if index > 0:
-        oneHotVec[index] = 1 - abs(0.5 - remainder)
-        oneHotVec[index-1] = 0.5 - max(0, 0.5-remainder)
-    else:
-        oneHotVec[index] = 1
-    if index < len(oneHotVec) -1:
-        oneHotVec[index+1] = max(0.5, remainder) - 0.5
+    oneHotVec[index] = 1
+    # if index > 0:
+    #     oneHotVec[index] = 1 - abs(0.5 - remainder)
+    #     oneHotVec[index-1] = 0.5 - max(0, 0.5-remainder)
+    # else:
+    #     oneHotVec[index] = 1
+    # if index < len(oneHotVec) -1:
+    #     oneHotVec[index+1] = max(0.5, remainder) - 0.5
     return oneHotVec
 
-def binaryIndexOf(searchElement):
-    minIndex = 0
-    maxIndex = len(self)
+def iteratorToOneHot(iterator):
+    print (iterator.shape)
+    for i in range(iterator.shape[0]):
+        iterator[i] = velocityToOneHot(iterator[i])
+    return iterator
+
+
 
 class Threshold(list):
     def __init__(self):
@@ -142,3 +200,26 @@ class Threshold(list):
         # remainder = diffA / float(diffA + diffB)
         return intIndex
 
+
+def oneHotToVelocity(vector):
+    threshold = Threshold()
+
+    index = np.argmax(vector)
+
+    velocity = int((threshold.value[index + 1] - threshold.value[index]) / 2 +  threshold.value[index])
+    return velocity
+
+def resultToStatistic(resultVector):
+    velocityVector = [None] * resultVector.shape[0]
+    for i in range(resultVector.shape[0]):
+        velocityVector[i] = oneHotToVelocity(resultVector[i, :])
+
+    print(velocityVector)
+    (mu, sigma) = norm.fit(velocityVector)
+    return mu, sigma
+
+
+
+
+if __name__ == '__main__':
+    convert_to('R8dataS2Gpre20Ubn15UibId100Hb15postItr30_20_1_50_1_1000.mat', 'dataInterpol')

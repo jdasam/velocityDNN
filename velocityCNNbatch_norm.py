@@ -5,21 +5,64 @@ import random
 import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
-from scipy.stats import norm
 from math import sqrt
 import hdf5storage
 import loadMatToNumpy as loadMat
+
+def _parse_function(example_proto):
+    features = {
+        "feature": tf.FixedLenFeature([445 * 14], tf.float32),
+        "label": tf.FixedLenFeature([13], tf.float32)}
+    ex = tf.parse_single_example(example_proto, features)
+
+    label = ex["label"]
+    feature = tf.reshape(ex['feature'], [445, 14])
+    return feature, label
+
+def one_shot_dataset(record_files, batch_size=128, buffer_size=1000, shuffle=True, num_threads=4):
+    dataset = tf.contrib.data.TFRecordDataset(record_files)
+    dataset = dataset.map(lambda x: _parse_function(x), num_threads=num_threads)
+
+    if shuffle:
+        dataset = dataset.shuffle(buffer_size)
+    dataset = dataset.batch(batch_size)
+    dataset = dataset.repeat()
+    iterator = dataset.make_one_shot_iterator()
+    return dataset, iterator
+
+
+def initalizable_dataset(record_files, batch_size=128, num_threads=4):
+    dataset = tf.contrib.data.TFRecordDataset(record_files)
+    dataset = dataset.map(lambda x: _parse_function(x), num_threads=num_threads)
+    dataset = dataset.batch(batch_size)
+    iterator = dataset.make_initializable_iterator()
+    return dataset, iterator
+
 
 
 
 
 # hyper parameters
-learning_rate = 0.005
-training_epochs = 60
+learning_rate = 0.0005
+training_epochs = 10
 batch_size = 128
 valid_batch_size = 3000
 trainSetRatio = 0.7
 epsilon = 1e-7
+# saver = tf.train.Saver(max_to_keep=3)
+
+train_dataset, train_iterator = one_shot_dataset('dataInterpol/train_.tfrecords',
+                                                 batch_size, 1000)
+_, valid_iterator = initalizable_dataset('dataInterpol/valid_.tfrecords',
+                                         valid_batch_size)
+_, test_iterator = initalizable_dataset('dataInterpol/test_.tfrecords',
+                                        batch_size=1, num_threads=1)
+
+handle = tf.placeholder(tf.string, shape=[])
+iterator = tf.contrib.data.Iterator.from_string_handle(
+    handle, train_dataset.output_types, train_dataset.output_shapes)
+feature, label = iterator.get_next()
+
 
 
 print('Refresh complete!!!!')
@@ -39,29 +82,15 @@ print('Refresh complete!!!!')
 # print(vel_cel[:])
 # print(vel_cel[0, 0])
 # print('Cell data length: ', vel_cel.shape)
-test_contents = (sio.loadmat('onsetCluster_beethoven_ivory_scale'))
-
-
-pieceSetSize = len( test_contents['onsetClusterArray'][0])
-
 
 
 
 
 # for i in range(trainSetSize):
 
-pieceX, pieceY = loadMat.loadPiece('onsetCluster_beethoven_ivory_scale')
-print(pieceX, pieceY)
+# pieceX, pieceY = loadMat.loadPiece('onsetCluster_beethoven_ivory_scale')
+# print(pieceX, pieceY)
 
-
-dataSetX, dataSetY = loadMat.loadTrainSet('R8dataS2Gpre20Ubn15UibId100Hb15postItr30_20_1_50_1_1000.mat')
-dataSetSize = dataSetX.shape[0]
-trainSetSize = int(dataSetSize *trainSetRatio)
-
-dataSetX, dataSetY = loadMat.unison_shuffled_copies(dataSetX,dataSetY)
-
-
-print(trainSetX.shape,  trainSetY.shape, testSetX.shape)
 
 
 # print(pieceY)
@@ -125,10 +154,17 @@ def conv_with_batch_norm(input_tensor, shape, scope_name, is_train, padding='SAM
 
 
 
-def build_graph():
+def build_graph(feature, label):
     # input place holders
-    X = tf.placeholder(tf.float32, [None, 445, 14, 1])  # img 445 * 14 *1
-    Y = tf.placeholder(tf.float32, [None, 13])
+    # X = tf.placeholder(tf.float32, [None, 445, 14, 1])  # img 445 * 14 *1
+    # Y = tf.placeholder(tf.float32, [None, 13])
+    X = tf.expand_dims(feature, -1)
+    print('X: ' ,X[0,0,0])
+    Y = label
+    # print (Y)
+    print('label: ', Y[0,:])
+    # Y = loadMat.iteratorToOneHot(label)
+
     is_training = tf.placeholder(tf.bool)
     # dropout (keep_prob) rate  0.7 on training, but should be 1 for testing
     # keep_prob = tf.placeholder(tf.float32)
@@ -167,12 +203,13 @@ def build_graph():
                          initializer=tf.contrib.layers.xavier_initializer())
     L3 = tf.nn.conv2d(L2, W3, strides=[1, 1, 1, 1], padding='SAME')
     print(L3)
-    L3_flat = tf.reshape(L3, [-1, 56 * 7 * 8])
+    print L3.get_shape()
+    L3_flat = tf.reshape(L3, [-1, 56 * 7 * 4])
     BN3_flat = batch_norm_wrapper(L3_flat, is_training=is_training)
-    BN3 = tf.reshape(BN3_flat, [-1, 56, 7, 8])
+    BN3 = tf.reshape(BN3_flat, [-1, 56, 7, 4])
     L3 = tf.nn.relu(BN3)
     L3 = tf.nn.max_pool(L3, ksize=[1, 3, 3, 1],
-                        strides=[1, 2, 2, 2], padding='SAME')
+                        strides=[1, 2, 2, 1], padding='SAME')
     print(L3)
     L3_flat = tf.reshape(L3, [-1, 28 * 4 * 4])
 
@@ -203,7 +240,7 @@ def build_graph():
     # cost = tf.reduce_mean(tf.square(hypothesis - Y))
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
 
-    return (X, Y), optimizer, cost, hypothesis, tf.train.Saver(), is_training
+    return (X, Y), optimizer, cost, hypothesis, tf.train.Saver(max_to_keep=1), is_training
 
 
 
@@ -224,11 +261,7 @@ Tensor("MaxPool:0", shape=(?, 14, 14, 32), dtype=float32)
 # L2 ImgIn shape=(?, 14, 14, 32)
 
 # initialize
-sess = tf.Session()
-
-sess.close()
-tf.reset_default_graph()
-(X, Y), optimizer, cost, hypothesis, saver,is_training = build_graph()
+(X, Y), optimizer, cost, hypothesis, saver,is_training = build_graph(feature, label)
 
 # train my model
 # accuracy = tf.reduce_mean(1-tf.abs(hypothesis-Y)/Y)
@@ -239,9 +272,25 @@ pred2 = tf.reduce_mean(tf.cast(tf.less_equal(tf.abs(tf.argmax(hypothesis, 1) - t
 pred3 = tf.reduce_mean(tf.abs(tf.argmax(hypothesis, 1) - tf.argmax(Y, 1)))
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
+# c = tf.ConfigProto()
+# c.gpu_options.visible_device_list = str(1)
+# c.gpu_options.allow_growth = True
+
 with tf.Session() as sess:
 # train my model
     sess.run(tf.global_variables_initializer())
+    # dataSetX, dataSetY = loadMat.loadTrainSet('R8dataS2Gpre20Ubn15UibId100Hb15postItr30_20_1_50_1_1000.mat')
+    # dataSetSize = dataSetX.shape[0]
+    # trainSetSize = int(dataSetSize *trainSetRatio)
+    #
+    # dataSetX, dataSetY = loadMat.unison_shuffled_copies(dataSetX,dataSetY)
+    # trainSetX, trainSetY, testSetX, testSetY = loadMat.dataSetToTrainTest(dataSetX, dataSetY, trainSetSize)
+    train_handle = sess.run(train_iterator.string_handle())
+    valid_handle = sess.run(valid_iterator.string_handle())
+    test_handle = sess.run(test_iterator.string_handle())
+
+
+
     print('Learning started. It takes sometime.')
     for epoch in range(training_epochs):
         avg_cost = 0
@@ -249,45 +298,65 @@ with tf.Session() as sess:
         avg_validCost = 0
         avg_validError = 0
         avg_validGuess = 0
-        total_batch = int(trainSetSize / batch_size)
+        total_batch = int(287490 *0.6 / batch_size)
+
+
 
         for i in range(total_batch):
-            batch_xs, batch_ys = trainSetX[i * batch_size:(i + 1) * batch_size], trainSetY[
-                                                                                 i * batch_size:(i + 1) * batch_size]
-            feed_dict = {X: batch_xs, Y: batch_ys, is_training: True}
-            c, _ = sess.run([cost, optimizer], feed_dict=feed_dict)
-            avg_cost += c / total_batch
-
+        #     batch_xs, batch_ys = trainSetX[i * batch_size:(i + 1) * batch_size], trainSetY[
+        #                                                                          i * batch_size:(i + 1) * batch_size]
+        #     feed_dict = {X: batch_xs, Y: batch_ys, is_training: True}
+        #     c, _ = sess.run([cost, optimizer], feed_dict=feed_dict)
+        #     avg_cost += c / total_batch
+            c, _ = sess.run([cost, optimizer], feed_dict={handle: train_handle,
+                                                            is_training: True,
+                                                            })
+            avg_cost += c
+        avg_cost /=  total_batch
         print('Epoch:', '%04d' % (epoch + 1), 'cost =', '{:.9f}'.format(avg_cost))
 
-        total_valid_batch = int(testSetX.shape[0] / valid_batch_size)
-        for i in range(total_valid_batch):
-            batch_xs, batch_ys = testSetX[i * valid_batch_size:(i + 1) * valid_batch_size], testSetY[
-                                                                                 i * valid_batch_size:(i + 1) * valid_batch_size]
-            feed_dict = {X: batch_xs, Y: batch_ys, is_training: False}
-            # c, validAccu, validError = sess.run([cost, accuracy, mean_error], feed_dict=feed_dict)
-            c, validAccu, validGuess = sess.run([cost, accuracy, pred2], feed_dict=feed_dict)
+        # total_valid_batch = int( 287490 *0.2 / valid_batch_size)
+        sess.run(valid_iterator.initializer)
+        total_valid_batch = 0
+        while True:
+            total_valid_batch += 1
+            try:
 
-            avg_validCost += c / total_valid_batch
-            avg_validAccu += validAccu / total_valid_batch
-            # avg_validError += validError / total_valid_batch
-            avg_validGuess += validGuess / total_valid_batch
+                # for i in range(total_valid_batch):
+                # batch_xs, batch_ys = testSetX[i * valid_batch_size:(i + 1) * valid_batch_size], testSetY[
+                #                                                                      i * valid_batch_size:(i + 1) * valid_batch_size]
+                feed_dict = {handle: valid_handle, is_training: False}
+                # c, validAccu, validError = sess.run([cost, accuracy, mean_error], feed_dict=feed_dict)
+                c, validAccu, validGuess = sess.run([cost, accuracy, pred2], feed_dict=feed_dict)
+
+                avg_validCost += c
+                avg_validAccu += validAccu
+                # avg_validError += validError / total_valid_batch
+                avg_validGuess += validGuess
+            except tf.errors.OutOfRangeError:
+                break
+        avg_validAccu /= total_valid_batch
+        avg_validCost /= total_valid_batch
+        avg_validGuess/= total_valid_batch
         # validAccu = sess.run((accuracy, mean_error, cost), feed_dict={X: testSetX, Y: testSetY, is_training: False})
         print('Validation Accuracy:', avg_validAccu, 'Validation Cost:', avg_validCost, 'Validation Guess:', avg_validGuess)
-    saved_model = saver.save(sess, './temp-bn-save')
+    saved_model = saver.save(sess, './temp-bn-save' )
 
-    pieceX, pieceY = loadPiece('onsetCluster_beethoven_ivory_scale')
+    pieceX, pieceY = loadMat.loadPiece('beethoven_onset')
     pieceAccu,result =  sess.run([(accuracy), hypothesis], feed_dict={X: pieceX, Y: pieceY, is_training:False})
     # result =  sess.run(hypothesis, feed_dict={X: pieceX, Y: pieceY, is_training:False})
-    (mu, sigma) = norm.fit(result)
+
+    print("Result Value: ", result)
+    mu, sigma = loadMat.resultToStatistic(result)
     sigma = sigma * sqrt(2)
     print(mu, sigma)
     print('Piece Accuracy:', pieceAccu)
 
-    pieceX, pieceY = loadPiece('onsetCluster_chopin_smd')
+    pieceX, pieceY = loadMat.loadPiece('onsetCluster_chopin_smd')
     pieceAccu, result = sess.run([(accuracy), hypothesis], feed_dict={X: pieceX, Y: pieceY, is_training: False})
     # result =  sess.run(hypothesis, feed_dict={X: pieceX, Y: pieceY, is_training:False})
-    (mu, sigma) = norm.fit(result)
+    mu, sigma = loadMat.resultToStatistic(result)
+    # (mu, sigma) = norm.fit(result)
     sigma = sigma * sqrt(2)
     print(mu, sigma)
     print('Piece Accuracy:', pieceAccu)
@@ -314,3 +383,5 @@ print('Learning Finished!')
 # y = norm.pdf(x, mean, std)
 # plt.plot(x, y)
 # plt.show()
+
+
