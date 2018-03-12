@@ -150,14 +150,14 @@ def velocityToOneHot(velocity):
     # print(velocity)
     # print('binaryIndexof Result: ', index)
 
-    # oneHotVec[index] = 1
-    if index > 0:
-        oneHotVec[index] = 1 - abs(0.5 - remainder)
-        oneHotVec[index-1] = 0.5 - max(0, 0.5-remainder)
-    else:
-        oneHotVec[index] = 1
-    if index < len(oneHotVec) -1:
-        oneHotVec[index+1] = max(0.5, remainder) - 0.5
+    oneHotVec[index] = 1
+    # if index > 0:
+    #     oneHotVec[index] = 1 - abs(0.5 - remainder)
+    #     oneHotVec[index-1] = 0.5 - max(0, 0.5-remainder)
+    # else:
+    #     oneHotVec[index] = 1
+    # if index < len(oneHotVec) -1:
+    #     oneHotVec[index+1] = max(0.5, remainder) - 0.5
     return oneHotVec
 
 def iteratorToOneHot(iterator):
