@@ -43,8 +43,8 @@ def initalizable_dataset(record_files, batch_size=128, num_threads=4):
 
 
 # hyper parameters
-learning_rate = 0.0005
-training_epochs = 10
+learning_rate = 0.00005
+training_epochs = 50
 batch_size = 128
 valid_batch_size = 3000
 trainSetRatio = 0.7
@@ -342,7 +342,7 @@ with tf.Session() as sess:
         print('Validation Accuracy:', avg_validAccu, 'Validation Cost:', avg_validCost, 'Validation Guess:', avg_validGuess)
     saved_model = saver.save(sess, './temp-bn-save' )
 
-    pieceX, pieceY = loadMat.loadPiece('beethoven_onset')
+    pieceX, pieceY = loadMat.loadPiece('rachmaninoff36-3')
     pieceAccu,result =  sess.run([(accuracy), hypothesis], feed_dict={X: pieceX, Y: pieceY, is_training:False})
     # result =  sess.run(hypothesis, feed_dict={X: pieceX, Y: pieceY, is_training:False})
 
@@ -352,7 +352,7 @@ with tf.Session() as sess:
     print(mu, sigma)
     print('Piece Accuracy:', pieceAccu)
 
-    pieceX, pieceY = loadMat.loadPiece('onsetCluster_chopin_smd')
+    pieceX, pieceY = loadMat.loadPiece('haydn52-2')
     pieceAccu, result = sess.run([(accuracy), hypothesis], feed_dict={X: pieceX, Y: pieceY, is_training: False})
     # result =  sess.run(hypothesis, feed_dict={X: pieceX, Y: pieceY, is_training:False})
     mu, sigma = loadMat.resultToStatistic(result)
