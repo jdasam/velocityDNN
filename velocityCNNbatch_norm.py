@@ -1,3 +1,4 @@
+from __future__ import division
 import tensorflow as tf
 import scipy.io as sio
 import numpy as np
@@ -5,10 +6,12 @@ import random
 import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
-from math import sqrt
+from math import sqrt, ceil
 import hdf5storage
 import loadMatToNumpy as loadMat
 import argparse
+import os
+import csv
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-mode", "--sessMode", type=str, default='train', help="train or test")
@@ -19,6 +22,9 @@ parser.add_argument("-mode", "--sessMode", type=str, default='train', help="trai
 # parser.add_argument("-d", "--del_dup", action='store_true', help="delete_duplicate_fft_bin")
 # parser.add_argument("-low", "--lowest_bin", type=int, default=21, help="lower midi range")
 # parser.add_argument("-high", "--highest_bin", type=int, default=108, help="upper midi range")
+parser.add_argument("-model", "--nnModel", type=str, default="cnn", help="cnn or fcn")
+parser.add_argument("-path", "--testPath", type=str, default="./testMat", help="folder path of test mat")
+parser.add_argument("-tset", "--trainingSet", type=str, default="dataOneHot", help="training set folder path")
 args = parser.parse_args()
 
 # python ~.py -mode=test
@@ -71,11 +77,11 @@ epsilon = 1e-7
 mode = 'train'
 # saver = tf.train.Saver(max_to_keep=3)
 
-train_dataset, train_iterator = one_shot_dataset('dataOneHot/train_.tfrecords',
+train_dataset, train_iterator = one_shot_dataset( args.trainingSet+'/train_.tfrecords',
                                                  batch_size, 1000)
-_, valid_iterator = initalizable_dataset('dataOneHot/valid_.tfrecords',
+_, valid_iterator = initalizable_dataset(args.trainingSet+'/valid_.tfrecords',
                                          valid_batch_size)
-_, test_iterator = initalizable_dataset('dataOneHot/test_.tfrecords',
+_, test_iterator = initalizable_dataset(args.trainingSet+'/test_.tfrecords',
                                         batch_size=1, num_threads=1)
 
 handle = tf.placeholder(tf.string, shape=[])
@@ -178,81 +184,100 @@ def build_graph(feature, label, pos_weight):
     # input place holders
     # X = tf.placeholder(tf.float32, [None, 445, 14, 1])  # img 445 * 14 *1
     # Y = tf.placeholder(tf.float32, [None, 13])
-    X = tf.expand_dims(feature, -1)
-    print('X: ' ,X[0,0,0])
+
     Y = label
     # print (Y)
     print('label: ', Y[0,:])
     # Y = loadMat.iteratorToOneHot(label)
 
     is_training = tf.placeholder(tf.bool)
+
+
+
+
+    if args.nnModel == "cnn":
+        X = tf.expand_dims(feature, -1, name='X')
     # dropout (keep_prob) rate  0.7 on training, but should be 1 for testing
     # keep_prob = tf.placeholder(tf.float32)
-    W1 = tf.get_variable("W1", shape=[5, 3, 1, 32],
-                         initializer=tf.contrib.layers.xavier_initializer())
+        W1 = tf.get_variable("W1", shape=[5, 3, 1, 32],
+                             initializer=tf.contrib.layers.xavier_initializer())
 
-    # W1 = tf.Variable(tf.random_normal([5, 3, 1, 32], stddev=0.01))
-    L1 = tf.nn.conv2d(X, W1, strides=[1, 2, 1, 1], padding='SAME')
-    L1_flat = tf.reshape(L1, [-1, 223*14*32])
-    print(L1)
-    BN1_flat = batch_norm_wrapper(L1_flat, is_training=is_training)
-    BN1 = tf.reshape(BN1_flat, [-1, 223,14,32])
-    L1 = tf.nn.relu(BN1)
-    L1 = tf.nn.max_pool(L1, ksize=[1, 2, 1, 1],
-                        strides=[1, 2, 1, 1], padding='SAME')
-    print(L1)
-
-
-
-
-    W2 = tf.get_variable("W2", shape=[3, 3, 32, 8],
-                         initializer=tf.contrib.layers.xavier_initializer())
-    L2 = tf.nn.conv2d(L1, W2, strides=[1, 1, 1, 1], padding='SAME')
-    print(L2)
-    L2_flat = tf.reshape(L2, [-1, 112 * 14 * 8])
-    BN2_flat = batch_norm_wrapper(L2_flat, is_training=is_training)
-    BN2 = tf.reshape(BN2_flat, [-1, 112, 14, 8])
-    L2 = tf.nn.relu(BN2)
-    L2 = tf.nn.max_pool(L2, ksize=[1, 2, 2, 1],
-                        strides=[1, 2, 2, 1], padding='SAME')
-    print(L2)
-    # L2_flat = tf.reshape(L2, [-1, 56 * 7 * 4])
-
-
-    W3 = tf.get_variable("W3", shape=[5, 5, 8, 4],
-                         initializer=tf.contrib.layers.xavier_initializer())
-    L3 = tf.nn.conv2d(L2, W3, strides=[1, 1, 1, 1], padding='SAME')
-    print(L3)
-    print L3.get_shape()
-    L3_flat = tf.reshape(L3, [-1, 56 * 7 * 4])
-    BN3_flat = batch_norm_wrapper(L3_flat, is_training=is_training)
-    BN3 = tf.reshape(BN3_flat, [-1, 56, 7, 4])
-    L3 = tf.nn.relu(BN3)
-    L3 = tf.nn.max_pool(L3, ksize=[1, 3, 3, 1],
-                        strides=[1, 2, 2, 1], padding='SAME')
-    print(L3)
-    L3_flat = tf.reshape(L3, [-1, 28 * 4 * 4])
+        # W1 = tf.Variable(tf.random_normal([5, 3, 1, 32], stddev=0.01))
+        L1 = tf.nn.conv2d(X, W1, strides=[1, 2, 1, 1], padding='SAME')
+        L1_flat = tf.reshape(L1, [-1, 223*14*32])
+        print(L1)
+        BN1_flat = batch_norm_wrapper(L1_flat, is_training=is_training)
+        BN1 = tf.reshape(BN1_flat, [-1, 223,14,32])
+        L1 = tf.nn.relu(BN1)
+        L1 = tf.nn.max_pool(L1, ksize=[1, 2, 1, 1],
+                            strides=[1, 2, 1, 1], padding='SAME')
+        print(L1)
 
 
 
-    W4 = tf.get_variable("W4", shape=[28 * 4 * 4, 300],
-                         initializer=tf.contrib.layers.xavier_initializer())
-    b4 = tf.Variable(tf.random_normal([300]))
-    L4 = tf.matmul(L3_flat, W4) + b4
-    BN4_flat = batch_norm_wrapper(L4, is_training=is_training)
-    BN4 = tf.reshape(BN4_flat, [-1, 300])
-    L4 = tf.nn.relu(BN4)
+
+        W2 = tf.get_variable("W2", shape=[3, 3, 32, 8],
+                             initializer=tf.contrib.layers.xavier_initializer())
+        L2 = tf.nn.conv2d(L1, W2, strides=[1, 1, 1, 1], padding='SAME')
+        print(L2)
+        L2_flat = tf.reshape(L2, [-1, 112 * 14 * 8])
+        BN2_flat = batch_norm_wrapper(L2_flat, is_training=is_training)
+        BN2 = tf.reshape(BN2_flat, [-1, 112, 14, 8])
+        L2 = tf.nn.relu(BN2)
+        L2 = tf.nn.max_pool(L2, ksize=[1, 2, 2, 1],
+                            strides=[1, 2, 2, 1], padding='SAME')
+        print(L2)
+        # L2_flat = tf.reshape(L2, [-1, 56 * 7 * 4])
+
+
+        W3 = tf.get_variable("W3", shape=[5, 5, 8, 4],
+                             initializer=tf.contrib.layers.xavier_initializer())
+        L3 = tf.nn.conv2d(L2, W3, strides=[1, 1, 1, 1], padding='SAME')
+        print(L3)
+        print L3.get_shape()
+        L3_flat = tf.reshape(L3, [-1, 56 * 7 * 4])
+        BN3_flat = batch_norm_wrapper(L3_flat, is_training=is_training)
+        BN3 = tf.reshape(BN3_flat, [-1, 56, 7, 4])
+        L3 = tf.nn.relu(BN3)
+        L3 = tf.nn.max_pool(L3, ksize=[1, 3, 3, 1],
+                            strides=[1, 2, 2, 1], padding='SAME')
+        print(L3)
+        L3_flat = tf.reshape(L3, [-1, 28 * 4 * 4])
 
 
 
-    W5 = tf.get_variable("W5", shape=[300, 13],
-                         initializer=tf.contrib.layers.xavier_initializer())
-    print(W5)
-    b = tf.Variable(tf.random_normal([13]))
-    hypothesis = tf.matmul(L4, W5) + b
+        W4 = tf.get_variable("W4", shape=[28 * 4 * 4, 300],
+                             initializer=tf.contrib.layers.xavier_initializer())
+        b4 = tf.Variable(tf.random_normal([300]))
+        L4 = tf.matmul(L3_flat, W4) + b4
+        BN4_flat = batch_norm_wrapper(L4, is_training=is_training)
+        BN4 = tf.reshape(BN4_flat, [-1, 300])
+        L4 = tf.nn.relu(BN4)
 
-    print('hypothesis: ', hypothesis)
-    print('Y: ', Y)
+
+
+        W5 = tf.get_variable("W5", shape=[300, 13],
+                             initializer=tf.contrib.layers.xavier_initializer())
+        print(W5)
+        b = tf.Variable(tf.random_normal([13]))
+        hypothesis = tf.matmul(L4, W5) + b
+
+        print('hypothesis: ', hypothesis)
+        print('Y: ', Y)
+    elif args.nnModel == "fcn":
+        X = tf.reshape(feature, [-1,445*14])
+        Fc1 = tf.contrib.layers.fully_connected(inputs=X, num_outputs=256, activation_fn=tf.nn.selu)
+        Fc2 = tf.contrib.layers.fully_connected(inputs=Fc1, num_outputs=256, activation_fn=tf.nn.selu)
+        Fc3 = tf.contrib.layers.fully_connected(inputs=Fc2, num_outputs=256, activation_fn=tf.nn.selu)
+        Fc4 = tf.contrib.layers.fully_connected(inputs=Fc3, num_outputs=256, activation_fn=tf.nn.selu)
+        Fc5 = tf.contrib.layers.fully_connected(inputs=Fc4, num_outputs=256, activation_fn=tf.nn.selu)
+        hypothesis = tf.contrib.layers.fully_connected(inputs=Fc5, num_outputs=13, activation_fn=tf.nn.relu)
+        print('hypotht: ',hypothesis)
+
+    elif args.nnModel =='single':
+        X = tf.reshape(feature, [-1,445*14])
+        hypothesis = tf.contrib.layers.fully_connected(inputs=X, num_outputs=13, activation_fn=tf.nn.relu)
+
 
     # define cost/loss & optimizer
     cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits = hypothesis, labels=Y)
@@ -331,7 +356,7 @@ if args.sessMode  == 'train':
             avg_validCost = 0
             avg_validError = 0
             avg_validGuess = 0
-            total_batch = int(287490 *0.6 / batch_size)
+            total_batch = int(95920 *0.8 / batch_size)
 
 
 
@@ -373,46 +398,49 @@ if args.sessMode  == 'train':
             avg_validGuess/= total_valid_batch
             # validAccu = sess.run((accuracy, mean_error, cost), feed_dict={X: testSetX, Y: testSetY, is_training: False})
             print('Validation Accuracy:', avg_validAccu, 'Validation Cost:', avg_validCost, 'Validation Guess:', avg_validGuess)
-            saved_model = saver.save(sess, './savedModel/temp-bn-save')
+            saved_model = saver.save(sess, './savedModel_'+args.trainingSet+'/temp-bn-save')
         print('Learning Finished!')
 else:
     with tf.Session() as sess:
-        saver.restore(sess, tf.train.latest_checkpoint('./'))
+        saver.restore(sess, tf.train.latest_checkpoint('./savedModel_dataSynthogy/'))
+        # fileList = os.listdir(args.testPath)
+        fileList = loadMat.readExtInFolder(args.testPath, 'mat')
+        print('File List: ', fileList)
+        for pieceIndex in range(len(fileList)):
+            testMatName = args.testPath+'/'+fileList[pieceIndex].split('.mat')[0]
+            pieceX, pieceY = loadMat.loadPiece(testMatName)
+            test_batch = int(ceil(pieceX.shape[0]/valid_batch_size))
+            # print('number of test batch: ',test_batch)
+            result = np.empty([1, 13])
+            avg_pieceAccu = 0
+            for i in range(test_batch):
+                batch_xs, batch_ys = pieceX[i * valid_batch_size:(i + 1) * valid_batch_size], pieceY[i * valid_batch_size:(i + 1) * valid_batch_size]
+                batch_xs = batch_xs.reshape([-1, 6230])
+                feed_dict = {X: batch_xs, Y: batch_ys, is_training: False}
+                # c, validAccu, validError = sess.run([cost, accuracy, mean_error], feed_dict=feed_dict)
+                pieceAccu, tempResult = sess.run([accuracy, hypothesis], feed_dict=feed_dict)
+                avg_pieceAccu += pieceAccu
+                result = np.concatenate((result, tempResult), axis=0)
+                # result = result.flatten()
+            pieceAccu = avg_pieceAccu / test_batch
+            # pieceAccu,result =  sess.run([(accuracy), hypothesis], feed_dict={X: pieceX, Y: pieceY, is_training:False})
+            # result =  sess.run(hypothesis, feed_dict={X: pieceX, Y: pieceY, is_training:False})
 
+            # print("Result Value: ", result.shape)
+            velocity = loadMat.resultToVelocity(result)
+            mu, sigma = loadMat.velocityToStatistic(velocity)
+            # print(velocity)
 
-        pieceX, pieceY = loadMat.loadPiece('rachmaninoff36-3')
-        test_batch = int(pieceX.shape[0]/valid_batch_size)
-        result = np.empty([1,13])
-        avg_pieceAccu = 0
-        for i in range(test_batch):
-            batch_xs, batch_ys = pieceX[i * valid_batch_size:(i + 1) * valid_batch_size], pieceY[
-                                                                                 i * valid_batch_size:(i + 1) * valid_batch_size]
-            feed_dict = {X:batch_xs, Y: batch_ys, is_training: False}
-    # c, validAccu, validError = sess.run([cost, accuracy, mean_error], feed_dict=feed_dict)
-            pieceAccu, tempResult = sess.run([accuracy, hypothesis], feed_dict=feed_dict)
-            avg_pieceAccu += pieceAccu
-            print('TempResult: ', tempResult.shape)
-            result = np.concatenate((result, tempResult), axis=0)
-            # result = result.flatten()
-        pieceAccu = avg_pieceAccu / test_batch
-        # pieceAccu,result =  sess.run([(accuracy), hypothesis], feed_dict={X: pieceX, Y: pieceY, is_training:False})
-        # result =  sess.run(hypothesis, feed_dict={X: pieceX, Y: pieceY, is_training:False})
+            sigma = sigma * sqrt(2)
+            print('Piece name is ', testMatName, 'and statistics are ', (mu, sigma))
+            print('Piece Accuracy:', pieceAccu)
 
-        print("Result Value: ", result.shape)
-        mu, sigma = loadMat.resultToStatistic(result)
-        sigma = sigma * sqrt(2)
-        print(mu, sigma)
-        print('Piece Accuracy:', pieceAccu)
-
-        pieceX, pieceY = loadMat.loadPiece('haydn52-2')
-        pieceAccu, result = sess.run([(accuracy), hypothesis], feed_dict={X: pieceX, Y: pieceY, is_training: False})
-        # result =  sess.run(hypothesis, feed_dict={X: pieceX, Y: pieceY, is_training:False})
-        mu, sigma = loadMat.resultToStatistic(result)
-        # (mu, sigma) = norm.fit(result)
-        sigma = sigma * sqrt(2)
-        print(mu, sigma)
-        print('Piece Accuracy:', pieceAccu)
-
+            csv_name = fileList[pieceIndex].split('.mp3')[0] + '.csv'
+            csv_dir = args.testPath + '/'
+            csv_file = open(csv_dir+csv_name, 'w')
+            csv_writer = csv.writer(csv_file)
+            csv_writer.writerow(velocity)
+            csv_file.close()
 # print(result)
 
 

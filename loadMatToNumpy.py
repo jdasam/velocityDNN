@@ -1,9 +1,13 @@
+from __future__ import division
+import math
 import numpy as np
 import h5py
 import scipy.io as sio
 from scipy.stats import norm
 import tensorflow as tf
 import random
+import os
+
 
 def _bytes_feature(value):
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=value))
@@ -27,13 +31,14 @@ def convert_to(whole_file, save_folder):
     t_writer = writer('train')
     v_writer = writer('valid')
     te_writer = writer('test')
-    whole_x, whole_y = loadTrainSet(whole_file)
+    # whole_x, whole_y = loadTrainSet(whole_file)
+    whole_x, whole_y = mergeMatFolder(whole_file)
     print whole_x[1,2,3]
     n_data = whole_x.shape[0]
     print whole_x.shape, whole_y.shape
     idx = range(n_data)
     random.shuffle(idx)
-    n_train = int(n_data*0.6)
+    n_train = int(n_data*0.8)
     n_valid = int(n_data*0.2)
 
     for n in range(n_data):
@@ -62,7 +67,7 @@ def loadTrainSet(filename):
     dataSetX = []
     dataSetY = []
 
-    for setIndex in range(vel_cel.shape[1]):
+    for setIndex in range(3): #range(vel_cel.shape[1]):
         for foldIndex in range(vel_cel.shape[0]):
             set_fold_cell = mat_contents[vel_cel[foldIndex, setIndex]]
             spec_cell = mat_contents[set_fold_cell[3, 0]]
@@ -97,6 +102,16 @@ def loadTrainSet(filename):
     dataSetX = np.asarray(dataSetX)
     dataSetY = np.asarray(dataSetY)
     return dataSetX, dataSetY
+
+def mergeMatFolder(path):
+    fileList = os.listdir(path)
+    wholeFileX = np.empty([0, 445,14 ,1])
+    wholeFileY = np.empty([0,13])
+    for matIndex in range(len(fileList)):
+        pieceX, pieceY = loadPiece(path+'/'+fileList[matIndex])
+        wholeFileX = np.concatenate((wholeFileX,pieceX), axis=0)
+        wholeFileY = np.concatenate((wholeFileY,pieceY), axis=0)
+    return wholeFileX, wholeFileY
 
 
 def dataSetToTrainTest(dataSetX, dataSetY, trainSetSize):
@@ -209,17 +224,48 @@ def oneHotToVelocity(vector):
     velocity = int((threshold.value[index + 1] - threshold.value[index]) / 2 +  threshold.value[index])
     return velocity
 
-def resultToStatistic(resultVector):
+def velocityToStatistic(velocityVector):
+    (mu, sigma) = norm.fit(velocityVector)
+    return mu, sigma
+
+def resultToVelocity(resultVector):
     velocityVector = [None] * resultVector.shape[0]
     for i in range(resultVector.shape[0]):
         velocityVector[i] = oneHotToVelocity(resultVector[i, :])
 
-    print(velocityVector)
-    (mu, sigma) = norm.fit(velocityVector)
-    return mu, sigma
+    return velocityVector
 
+def runTest(sess, file_name, batch_size):
+    pieceX, pieceY = loadPiece(file_name)
+    print(pieceX)
+    test_batch = int(math.ceil(pieceX.shape[0]/batch_size))
+    print('number of test batch: ', test_batch)
+    result = np.empty([1,13])
+    avg_pieceAccu = 0
+    for i in range(test_batch):
+        batch_xs, batch_ys = pieceX[i * batch_size:(i + 1) * batch_size], pieceY[
+                                                                             i * batch_size:(i + 1) * batch_size]
+        batch_xs = batch_xs.reshape([-1, 6230])
+        feed_dict = {X:batch_xs, Y: batch_ys, is_training: False}
+# c, validAccu, validError = sess.run([cost, accuracy, mean_error], feed_dict=feed_dict)
+        pieceAccu, tempResult = sess.run([accuracy, hypothesis], feed_dict=feed_dict)
+        avg_pieceAccu += pieceAccu
+        print('TempResult: ', tempResult.shape)
+        result = np.concatenate((result, tempResult), axis=0)
+        # result = result.flatten()
+    pieceAccu = avg_pieceAccu / test_batch
+    # pieceAccu,result =  sess.run([(accuracy), hypothesis], feed_dict={X: pieceX, Y: pieceY, is_training:False})
+    # result =  sess.run(hypothesis, feed_dict={X: pieceX, Y: pieceY, is_training:False})
+    return result
+
+def readExtInFolder(dir, ext):
+    fileList = os.listdir(dir)
+    for f in fileList:
+        if not f.endswith('.'+ext):
+            fileList.remove(f)
+    return fileList
 
 
 
 if __name__ == '__main__':
-    convert_to('R8dataS2Gpre20Ubn15UibId100Hb15postItr30_20_1_50_1_1000.mat', 'dataInterpol')
+    convert_to('./synthogyTraining', 'dataSynthogy')
