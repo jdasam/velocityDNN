@@ -33,14 +33,14 @@ args = parser.parse_args()
 def _parse_function(example_proto):
     features = {
         "feature": tf.FixedLenFeature([445 * 14], tf.float32),
-        "label": tf.FixedLenFeature([13], tf.float32)}
+        "label": tf.FixedLenFeature([loadMat.velClassNum], tf.float32)}
     ex = tf.parse_single_example(example_proto, features)
 
     label = ex["label"]
     feature = tf.reshape(ex['feature'], [445, 14])
-    def f1(): return tf.constant(0.3)
-    def f2(): return tf.constant(3.0)
-    pos_weight = tf.cond( tf.less_equal(tf.abs(tf.argmax(label,0)-6), 3), f1, f2 )
+    def f1(): return tf.constant(1)
+    def f2(): return tf.constant(1)
+    pos_weight = tf.cond( tf.less_equal(tf.abs(tf.argmax(label,0)-3), 1), f1, f2 )
 
     return feature, label, pos_weight
 
@@ -256,10 +256,10 @@ def build_graph(feature, label, pos_weight):
 
 
 
-        W5 = tf.get_variable("W5", shape=[300, 13],
+        W5 = tf.get_variable("W5", shape=[300, loadMat.velClassNum],
                              initializer=tf.contrib.layers.xavier_initializer())
         print(W5)
-        b = tf.Variable(tf.random_normal([13]))
+        b = tf.Variable(tf.random_normal([loadMat.velClassNum]))
         hypothesis = tf.matmul(L4, W5) + b
 
         print('hypothesis: ', hypothesis)
@@ -271,12 +271,12 @@ def build_graph(feature, label, pos_weight):
         Fc3 = tf.contrib.layers.fully_connected(inputs=Fc2, num_outputs=256, activation_fn=tf.nn.selu)
         Fc4 = tf.contrib.layers.fully_connected(inputs=Fc3, num_outputs=256, activation_fn=tf.nn.selu)
         Fc5 = tf.contrib.layers.fully_connected(inputs=Fc4, num_outputs=256, activation_fn=tf.nn.selu)
-        hypothesis = tf.contrib.layers.fully_connected(inputs=Fc5, num_outputs=13, activation_fn=tf.nn.relu)
+        hypothesis = tf.contrib.layers.fully_connected(inputs=Fc5, num_outputs=loadMat.velClassNum, activation_fn=tf.nn.relu)
         print('hypotht: ',hypothesis)
 
     elif args.nnModel =='single':
         X = tf.reshape(feature, [-1,445*14])
-        hypothesis = tf.contrib.layers.fully_connected(inputs=X, num_outputs=13, activation_fn=tf.nn.relu)
+        hypothesis = tf.contrib.layers.fully_connected(inputs=X, num_outputs=loadMat.velClassNum, activation_fn=tf.nn.relu)
 
 
     # define cost/loss & optimizer
@@ -402,7 +402,7 @@ if args.sessMode  == 'train':
         print('Learning Finished!')
 else:
     with tf.Session() as sess:
-        saver.restore(sess, tf.train.latest_checkpoint('./savedModel_dataSynthogy/'))
+        saver.restore(sess, tf.train.latest_checkpoint('./savedModel_'+args.trainingSet+'/'))
         # fileList = os.listdir(args.testPath)
         fileList = loadMat.readExtInFolder(args.testPath, 'mat')
         print('File List: ', fileList)
@@ -411,7 +411,7 @@ else:
             pieceX, pieceY = loadMat.loadPiece(testMatName)
             test_batch = int(ceil(pieceX.shape[0]/valid_batch_size))
             # print('number of test batch: ',test_batch)
-            result = np.empty([1, 13])
+            result = np.empty([1, loadMat.velClassNum])
             avg_pieceAccu = 0
             for i in range(test_batch):
                 batch_xs, batch_ys = pieceX[i * valid_batch_size:(i + 1) * valid_batch_size], pieceY[i * valid_batch_size:(i + 1) * valid_batch_size]

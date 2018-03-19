@@ -8,6 +8,7 @@ import tensorflow as tf
 import random
 import os
 
+velClassNum = 8
 
 def _bytes_feature(value):
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=value))
@@ -87,7 +88,7 @@ def loadTrainSet(filename):
 
 
                     # dataSetY.append(np.asarray(gt_vel_cell[j,dataSize]).reshape(1))
-                    dataSetY.append(velocityToOneHot(gt_vel_cell[j,dataSize]).reshape(13))
+                    dataSetY.append(velocityToOneHot(gt_vel_cell[j,dataSize]).reshape(velClassNum))
 
 
                     # temp = np.asarray(cell[0][0][0,3][i, targetPitchIndex]).reshape((50))
@@ -106,7 +107,7 @@ def loadTrainSet(filename):
 def mergeMatFolder(path):
     fileList = os.listdir(path)
     wholeFileX = np.empty([0, 445,14 ,1])
-    wholeFileY = np.empty([0,13])
+    wholeFileY = np.empty([0, velClassNum])
     for matIndex in range(len(fileList)):
         pieceX, pieceY = loadPiece(path+'/'+fileList[matIndex])
         wholeFileX = np.concatenate((wholeFileX,pieceX), axis=0)
@@ -142,7 +143,7 @@ def loadPiece(fileName):
         tempX = np.asarray(test_contents['onsetClusterArray'][0][i]).reshape((445, 14,1))
         pieceX.append(tempX / np.amax(tempX))
         # pieceY.append(np.asarray(test_contents['onsetMatchedVel'][0][i]).reshape(1))
-        pieceY.append(velocityToOneHot(test_contents['onsetMatchedVel'][0][i]).reshape(13))
+        pieceY.append(velocityToOneHot(test_contents['onsetMatchedVel'][0][i]).reshape(velClassNum))
 
     pieceX = np.asarray(pieceX)
     pieceY = np.asarray(pieceY)
@@ -151,7 +152,8 @@ def loadPiece(fileName):
 
 def velocityToOneHot(velocity):
 
-    oneHotVec = np.array([0,0,0,0,0,0,0,0,0,0,0,0,0])
+    # oneHotVec = np.array([0,0,0,0,0,0,0,0])
+    oneHotVec = np.zeros(velClassNum, dtype=int)
     threshold = Threshold()
     # print(threshold.binaryIndexOf(int(94.0)))
 
@@ -186,7 +188,7 @@ def iteratorToOneHot(iterator):
 class Threshold(list):
     def __init__(self):
         list.__init__([])
-        self.value = [0, 20, 30, 40, 50, 55, 60, 65, 70, 80, 90, 100, 110, 127]
+        self.value = [0, 30, 40, 50, 60, 70, 80, 95, 127]
 
     def binaryIndexOf(self, searchElement):
         minIndex = 0
@@ -240,7 +242,7 @@ def runTest(sess, file_name, batch_size):
     print(pieceX)
     test_batch = int(math.ceil(pieceX.shape[0]/batch_size))
     print('number of test batch: ', test_batch)
-    result = np.empty([1,13])
+    result = np.empty([1,velClassNum])
     avg_pieceAccu = 0
     for i in range(test_batch):
         batch_xs, batch_ys = pieceX[i * batch_size:(i + 1) * batch_size], pieceY[
@@ -260,12 +262,13 @@ def runTest(sess, file_name, batch_size):
 
 def readExtInFolder(dir, ext):
     fileList = os.listdir(dir)
+    extList = [];
     for f in fileList:
-        if not f.endswith('.'+ext):
-            fileList.remove(f)
-    return fileList
+        if f.endswith('.'+  ext):
+            extList.append(f)
+    return extList
 
 
 
 if __name__ == '__main__':
-    convert_to('./synthogyTraining', 'dataSynthogy')
+    convert_to('./synthogyTraining', 'dataSynthogy8')
