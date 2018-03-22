@@ -31,7 +31,8 @@ args = parser.parse_args()
 
 # python ~.py -mode=test
 # pos_weight_list = tf.constant([3.0, 1.5, 1.0, 0.5, 0.5, 1.0, 1.5, 3.0 ])
-pos_weight_list = tf.constant([3.5, 2.0, 1.0, 0.4, 0.4, 1.0, 2.0, 3.5 ])
+pos_weight_list = tf.constant([3.5, 2.0, 1.0, 0.4, 0.4, 1.0, 2.0, 3.5])
+
 
 def _parse_function(example_proto):
     features = {
@@ -77,9 +78,9 @@ def initalizable_dataset(record_files, batch_size=128, num_threads=4):
 
 # hyper parameters
 learning_rate = 0.0001
-training_epochs = 70
-batch_size = 128
-valid_batch_size = 128
+training_epochs = 100
+batch_size = 512
+valid_batch_size = 512
 trainSetRatio = 0.7
 epsilon = 1e-7
 mode = 'train'
@@ -273,12 +274,13 @@ def build_graph(feature, label, pos_weight):
         print('hypothesis: ', hypothesis)
         print('Y: ', Y)
     elif args.nnModel == "fcn":
+        reg = 0.0001
         X = tf.reshape(feature, [-1,445*14])
-        Fc1 = tf.contrib.layers.fully_connected(inputs=X, num_outputs=256, activation_fn=tf.nn.selu)
-        Fc2 = tf.contrib.layers.fully_connected(inputs=Fc1, num_outputs=256, activation_fn=tf.nn.selu)
-        Fc3 = tf.contrib.layers.fully_connected(inputs=Fc2, num_outputs=256, activation_fn=tf.nn.selu)
-        Fc4 = tf.contrib.layers.fully_connected(inputs=Fc3, num_outputs=256, activation_fn=tf.nn.selu)
-        Fc5 = tf.contrib.layers.fully_connected(inputs=Fc4, num_outputs=256, activation_fn=tf.nn.selu)
+        Fc1 = tf.contrib.layers.fully_connected(inputs=X, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
+        Fc2 = tf.contrib.layers.fully_connected(inputs=Fc1, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
+        Fc3 = tf.contrib.layers.fully_connected(inputs=Fc2, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
+        Fc4 = tf.contrib.layers.fully_connected(inputs=Fc3, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
+        Fc5 = tf.contrib.layers.fully_connected(inputs=Fc4, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
         hypothesis = tf.contrib.layers.fully_connected(inputs=Fc5, num_outputs=loadMat.velClassNum, activation_fn=tf.nn.relu)
         print('hypotht: ',hypothesis)
 
@@ -355,7 +357,7 @@ if args.sessMode  == 'train':
         valid_handle = sess.run(valid_iterator.string_handle())
         test_handle = sess.run(test_iterator.string_handle())
 
-        former_validation_cost  = 0
+        former_validation_cost = 100
         stop_patience = 0
         patience_limit = 5
 
@@ -367,10 +369,11 @@ if args.sessMode  == 'train':
             avg_validCost = 0
             avg_validError = 0
             avg_validGuess = 0
+            # total_batch = int(207817 *0.7 / batch_size)
             total_batch = int(97021 *0.7 / batch_size)
             # total_batch = int(95920 *0.8 / batch_size)
             # total_batch = int(194042 * 0.8 / batch_size)
-
+            t= time.time()
 
             for i in range(total_batch):
             #     batch_xs, batch_ys = trainSetX[i * batch_size:(i + 1) * batch_size], trainSetY[
@@ -404,6 +407,7 @@ if args.sessMode  == 'train':
                     # avg_validError += validError / total_valid_batch
                     avg_validGuess += validGuess
                 except tf.errors.OutOfRangeError:
+                    print('count_end. time={:f}, n_batch={:d}'.format(time.time() - t, total_batch))
                     break
             avg_validAccu /= total_valid_batch
             avg_validCost /= total_valid_batch
@@ -433,7 +437,7 @@ else:
         saver.restore(sess, tf.train.latest_checkpoint('./savedModel_'+args.trainingSet+'/'))
         # fileList = os.listdir(args.testPath)
         fileList = loadMat.readExtInFolder(args.testPath, 'mat')
-        totalStat = [];
+        totalStat = []
         print('File List: ', fileList)
         for pieceIndex in range(len(fileList)):
             testMatName = args.testPath+'/'+fileList[pieceIndex].split('.mat')[0]

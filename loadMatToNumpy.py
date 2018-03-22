@@ -268,4 +268,4 @@ def readExtInFolder(dir, ext):
 
 
 if __name__ == '__main__':
-    convert_to('./matSMDtrain', 'dataSMDscale8blur')
+    convert_to('./synthogyTraining', 'dataSynthogyExtended')
