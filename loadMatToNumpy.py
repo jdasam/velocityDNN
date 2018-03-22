@@ -21,7 +21,6 @@ def _int64_feature(value):
 def _float_feature(value):
     return tf.train.Feature(float_list=tf.train.FloatList(value=value))
 
-
 def convert_to(whole_file, save_folder):
 
     def writer(set_name):
@@ -39,8 +38,8 @@ def convert_to(whole_file, save_folder):
     print whole_x.shape, whole_y.shape
     idx = range(n_data)
     random.shuffle(idx)
-    n_train = int(n_data*0.8)
-    n_valid = int(n_data*0.2)
+    n_train = int(n_data*0.7)
+    n_valid = int(n_data*0.3)
 
     for n in range(n_data):
         if n % 5000 == 0:
@@ -153,7 +152,7 @@ def loadPiece(fileName):
 def velocityToOneHot(velocity):
 
     # oneHotVec = np.array([0,0,0,0,0,0,0,0])
-    oneHotVec = np.zeros(velClassNum, dtype=int)
+    oneHotVec = np.zeros(velClassNum, dtype=float)
     threshold = Threshold()
     # print(threshold.binaryIndexOf(int(94.0)))
 
@@ -167,14 +166,12 @@ def velocityToOneHot(velocity):
     # print(velocity)
     # print('binaryIndexof Result: ', index)
 
-    oneHotVec[index] = 1
-    # if index > 0:
-    #     oneHotVec[index] = 1 - abs(0.5 - remainder)
-    #     oneHotVec[index-1] = 0.5 - max(0, 0.5-remainder)
-    # else:
-    #     oneHotVec[index] = 1
-    # if index < len(oneHotVec) -1:
-    #     oneHotVec[index+1] = max(0.5, remainder) - 0.5
+    # oneHotVec[index] = 1
+    oneHotVec[index] = 1 - abs(0.5 - remainder)
+    if index > 0:
+        oneHotVec[index-1] = max(0, 0.5 - remainder)
+    if index < len(oneHotVec) -1:
+        oneHotVec[index+1] = max(0.5, remainder) - 0.5
     return oneHotVec
 
 def iteratorToOneHot(iterator):
@@ -262,7 +259,7 @@ def runTest(sess, file_name, batch_size):
 
 def readExtInFolder(dir, ext):
     fileList = os.listdir(dir)
-    extList = [];
+    extList = []
     for f in fileList:
         if f.endswith('.'+  ext):
             extList.append(f)
@@ -271,4 +268,4 @@ def readExtInFolder(dir, ext):
 
 
 if __name__ == '__main__':
-    convert_to('./synthogyTraining', 'dataSynthogy8')
+    convert_to('./matSMDtrain', 'dataSMDscale8blur')

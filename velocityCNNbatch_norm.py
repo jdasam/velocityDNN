@@ -12,6 +12,8 @@ import loadMatToNumpy as loadMat
 import argparse
 import os
 import csv
+import time
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-mode", "--sessMode", type=str, default='train', help="train or test")
@@ -28,7 +30,8 @@ parser.add_argument("-tset", "--trainingSet", type=str, default="dataOneHot", he
 args = parser.parse_args()
 
 # python ~.py -mode=test
-
+# pos_weight_list = tf.constant([3.0, 1.5, 1.0, 0.5, 0.5, 1.0, 1.5, 3.0 ])
+pos_weight_list = tf.constant([3.5, 2.0, 1.0, 0.4, 0.4, 1.0, 2.0, 3.5 ])
 
 def _parse_function(example_proto):
     features = {
@@ -38,9 +41,14 @@ def _parse_function(example_proto):
 
     label = ex["label"]
     feature = tf.reshape(ex['feature'], [445, 14])
-    def f1(): return tf.constant(1)
-    def f2(): return tf.constant(1)
-    pos_weight = tf.cond( tf.less_equal(tf.abs(tf.argmax(label,0)-3), 1), f1, f2 )
+    # def f1(): return tf.constant(1)
+    # def f2(): return tf.constant(1)
+    # pos_weight = tf.cond( tf.less_equal(tf.abs(tf.argmax(label,0)-3), 1), f1, f2 )
+    # pos_weight = tf.case( [  (tf.equal(tf.argmax(label,0),0), f1)  ])
+    pos_weight = tf.gather(pos_weight_list, tf.argmax(label,0))
+    # pos_weight = tf.constant(1)
+
+    # print(pos_weight)
 
     return feature, label, pos_weight
 
@@ -69,9 +77,9 @@ def initalizable_dataset(record_files, batch_size=128, num_threads=4):
 
 # hyper parameters
 learning_rate = 0.0001
-training_epochs = 50
+training_epochs = 70
 batch_size = 128
-valid_batch_size = 3000
+valid_batch_size = 128
 trainSetRatio = 0.7
 epsilon = 1e-7
 mode = 'train'
@@ -347,6 +355,9 @@ if args.sessMode  == 'train':
         valid_handle = sess.run(valid_iterator.string_handle())
         test_handle = sess.run(test_iterator.string_handle())
 
+        former_validation_cost  = 0
+        stop_patience = 0
+        patience_limit = 5
 
 
         print('Learning started. It takes sometime.')
@@ -356,8 +367,9 @@ if args.sessMode  == 'train':
             avg_validCost = 0
             avg_validError = 0
             avg_validGuess = 0
-            total_batch = int(95920 *0.8 / batch_size)
-
+            total_batch = int(97021 *0.7 / batch_size)
+            # total_batch = int(95920 *0.8 / batch_size)
+            # total_batch = int(194042 * 0.8 / batch_size)
 
 
             for i in range(total_batch):
@@ -399,12 +411,29 @@ if args.sessMode  == 'train':
             # validAccu = sess.run((accuracy, mean_error, cost), feed_dict={X: testSetX, Y: testSetY, is_training: False})
             print('Validation Accuracy:', avg_validAccu, 'Validation Cost:', avg_validCost, 'Validation Guess:', avg_validGuess)
             saved_model = saver.save(sess, './savedModel_'+args.trainingSet+'/temp-bn-save')
+
+
+            if epoch > training_epochs/10:
+                if former_validation_cost < avg_validCost and avg_validCost > avg_cost:
+                    stop_patience += 1
+
+                    if stop_patience == patience_limit:
+                        print("Early Stopping Worked")
+                        break
+                else:
+                    stop_patience=0
+                    former_validation_cost = avg_validCost
+
+
+
+
         print('Learning Finished!')
 else:
     with tf.Session() as sess:
         saver.restore(sess, tf.train.latest_checkpoint('./savedModel_'+args.trainingSet+'/'))
         # fileList = os.listdir(args.testPath)
         fileList = loadMat.readExtInFolder(args.testPath, 'mat')
+        totalStat = [];
         print('File List: ', fileList)
         for pieceIndex in range(len(fileList)):
             testMatName = args.testPath+'/'+fileList[pieceIndex].split('.mat')[0]
@@ -441,6 +470,15 @@ else:
             csv_writer = csv.writer(csv_file)
             csv_writer.writerow(velocity)
             csv_file.close()
+            totalStat.append(mu)
+            totalStat.append(sigma)
+        csv_name ='totalStat.csv'
+        csv_dir = args.testPath + '/'
+        csv_file = open(csv_dir + csv_name, 'w')
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(totalStat)
+        csv_file.close()
+
 # print(result)
 
 
