@@ -8,7 +8,7 @@ import tensorflow as tf
 import random
 import os
 
-velClassNum = 8
+velClassNum = 1
 specLength = 14
 
 def _bytes_feature(value):
@@ -87,8 +87,8 @@ def loadTrainSet(filename):
                     # print('gt_Vel:' ,np.asarray(gt_vel_cell[j,dataSize]))
 
 
-                    # dataSetY.append(np.asarray(gt_vel_cell[j,dataSize]).reshape(1))
-                    dataSetY.append(velocityToOneHot(gt_vel_cell[j,dataSize]).reshape(velClassNum))
+                    dataSetY.append(np.asarray(gt_vel_cell[j,dataSize]).reshape(1))
+                    # dataSetY.append(velocityToOneHot(gt_vel_cell[j,dataSize]).reshape(velClassNum))
 
 
                     # temp = np.asarray(cell[0][0][0,3][i, targetPitchIndex]).reshape((50))
@@ -107,7 +107,8 @@ def loadTrainSet(filename):
 def mergeMatFolder(path):
     fileList = os.listdir(path)
     wholeFileX = np.empty([0, 445,specLength ,1])
-    wholeFileY = np.empty([0, velClassNum])
+    # wholeFileY = np.empty([0, velClassNum])
+    wholeFileY = np.empty([0, 1])
     for matIndex in range(len(fileList)):
         pieceX, pieceY = loadPiece(path+'/'+fileList[matIndex])
         wholeFileX = np.concatenate((wholeFileX,pieceX), axis=0)
@@ -142,8 +143,8 @@ def loadPiece(fileName):
         # print(test_contents['onsetClusterArray'][0][i])
         tempX = np.asarray(test_contents['onsetClusterArray'][0][i]).reshape((445, specLength,1))
         pieceX.append(tempX / np.amax(tempX))
-        # pieceY.append(np.asarray(test_contents['onsetMatchedVel'][0][i]).reshape(1))
-        pieceY.append(velocityToOneHot(test_contents['onsetMatchedVel'][0][i]).reshape(velClassNum))
+        pieceY.append(np.asarray(test_contents['onsetMatchedVel'][0][i]).reshape(1))
+        # pieceY.append(velocityToOneHot(test_contents['onsetMatchedVel'][0][i]).reshape(velClassNum))
 
     pieceX = np.asarray(pieceX)
     pieceY = np.asarray(pieceY)
@@ -282,4 +283,4 @@ def calError(label, hypothesis):
 
 
 if __name__ == '__main__':
-    convert_to('./mat4window', 'dataWindow4')
+    convert_to('./matSMDtrain', 'dataRegression')

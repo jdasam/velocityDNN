@@ -37,7 +37,8 @@ pos_weight_list = tf.constant([3.5, 2.0, 1.0, 0.4, 0.4, 1.0, 2.0, 3.5])
 def _parse_function(example_proto):
     features = {
         "feature": tf.FixedLenFeature([445 * loadMat.specLength], tf.float32),
-        "label": tf.FixedLenFeature([loadMat.velClassNum], tf.float32)}
+        # "label": tf.FixedLenFeature([loadMat.velClassNum], tf.float32)}
+        "label": tf.FixedLenFeature(1, tf.float32)}
     ex = tf.parse_single_example(example_proto, features)
 
     label = ex["label"]
@@ -282,7 +283,9 @@ def build_graph(feature, label, pos_weight):
         Fc3 = tf.contrib.layers.fully_connected(inputs=Fc2, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
         Fc4 = tf.contrib.layers.fully_connected(inputs=Fc3, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
         Fc5 = tf.contrib.layers.fully_connected(inputs=Fc4, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
-        hypothesis = tf.contrib.layers.fully_connected(inputs=Fc5, num_outputs=loadMat.velClassNum, activation_fn=tf.nn.relu)
+        # hypothesis = tf.contrib.layers.fully_connected(inputs=Fc5, num_outputs=loadMat.velClassNum, activation_fn=tf.nn.relu)
+        hypothesis = tf.contrib.layers.fully_connected(inputs=Fc5, num_outputs=1, activation_fn=tf.nn.relu)
+
         print('hypotht: ',hypothesis)
 
     elif args.nnModel =='single':
@@ -302,10 +305,10 @@ def build_graph(feature, label, pos_weight):
 
 
     weighted_cross_entropy = tf.losses.compute_weighted_loss(cross_entropy, pos_weight)
-    cost = tf.reduce_mean(weighted_cross_entropy)
+    # cost = tf.reduce_mean(weighted_cross_entropy)
     # cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
         # logits=hypothesis, labels=Y))
-    # cost = tf.reduce_mean(tf.square(hypothesis - Y))
+    cost = tf.reduce_mean(tf.square(hypothesis - Y))
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
 
     return (X, Y), optimizer, cost, hypothesis, tf.train.Saver(max_to_keep=1), is_training
@@ -338,7 +341,10 @@ Tensor("MaxPool:0", shape=(?, 14, 14, 32), dtype=float32)
 correct_prediction = tf.equal(tf.argmax(hypothesis, 1), tf.argmax(Y, 1))
 pred2 = tf.reduce_mean(tf.cast(tf.less_equal(tf.abs(tf.argmax(hypothesis, 1) - tf.argmax(Y, 1)) , 1), tf.float32 ))
 pred3 = tf.reduce_mean(tf.abs(tf.argmax(hypothesis, 1) - tf.argmax(Y, 1)))
-accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+# accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
+accuracy = tf.reduce_mean(tf.cast(tf.less_equal(tf.abs(Y-hypothesis), 5),tf.float32 ) )
+
 
 # c = tf.ConfigProto()
 # c.gpu_options.visible_device_list = str(1)
@@ -358,7 +364,7 @@ if args.sessMode  == 'train':
         valid_handle = sess.run(valid_iterator.string_handle())
         test_handle = sess.run(test_iterator.string_handle())
 
-        former_validation_cost = 100
+        former_validation_cost = np.inf
         stop_patience = 0
         patience_limit = 5
 
@@ -419,7 +425,7 @@ if args.sessMode  == 'train':
 
 
             if epoch > training_epochs/10:
-                if former_validation_cost < avg_validCost and avg_validCost > avg_cost:
+                if former_validation_cost < avg_validCost:
                     stop_patience += 1
 
                     if stop_patience == patience_limit:
