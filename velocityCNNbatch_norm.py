@@ -36,12 +36,12 @@ pos_weight_list = tf.constant([3.5, 2.0, 1.0, 0.4, 0.4, 1.0, 2.0, 3.5])
 
 def _parse_function(example_proto):
     features = {
-        "feature": tf.FixedLenFeature([445 * 14], tf.float32),
+        "feature": tf.FixedLenFeature([445 * loadMat.specLength], tf.float32),
         "label": tf.FixedLenFeature([loadMat.velClassNum], tf.float32)}
     ex = tf.parse_single_example(example_proto, features)
 
     label = ex["label"]
-    feature = tf.reshape(ex['feature'], [445, 14])
+    feature = tf.reshape(ex['feature'], [445, loadMat.specLength])
     # def f1(): return tf.constant(1)
     # def f2(): return tf.constant(1)
     # pos_weight = tf.cond( tf.less_equal(tf.abs(tf.argmax(label,0)-3), 1), f1, f2 )
@@ -84,6 +84,7 @@ valid_batch_size = 512
 trainSetRatio = 0.7
 epsilon = 1e-7
 mode = 'train'
+
 # saver = tf.train.Saver(max_to_keep=3)
 
 train_dataset, train_iterator = one_shot_dataset( args.trainingSet+'/train_.tfrecords',
@@ -213,10 +214,10 @@ def build_graph(feature, label, pos_weight):
 
         # W1 = tf.Variable(tf.random_normal([5, 3, 1, 32], stddev=0.01))
         L1 = tf.nn.conv2d(X, W1, strides=[1, 2, 1, 1], padding='SAME')
-        L1_flat = tf.reshape(L1, [-1, 223*14*32])
+        L1_flat = tf.reshape(L1, [-1, 223*loadMat.specLength*32])
         print(L1)
         BN1_flat = batch_norm_wrapper(L1_flat, is_training=is_training)
-        BN1 = tf.reshape(BN1_flat, [-1, 223,14,32])
+        BN1 = tf.reshape(BN1_flat, [-1, 223,loadMat.specLength,32])
         L1 = tf.nn.relu(BN1)
         L1 = tf.nn.max_pool(L1, ksize=[1, 2, 1, 1],
                             strides=[1, 2, 1, 1], padding='SAME')
@@ -229,9 +230,9 @@ def build_graph(feature, label, pos_weight):
                              initializer=tf.contrib.layers.xavier_initializer())
         L2 = tf.nn.conv2d(L1, W2, strides=[1, 1, 1, 1], padding='SAME')
         print(L2)
-        L2_flat = tf.reshape(L2, [-1, 112 * 14 * 8])
+        L2_flat = tf.reshape(L2, [-1, 112 * loadMat.specLength * 8])
         BN2_flat = batch_norm_wrapper(L2_flat, is_training=is_training)
-        BN2 = tf.reshape(BN2_flat, [-1, 112, 14, 8])
+        BN2 = tf.reshape(BN2_flat, [-1, 112, loadMat.specLength, 8])
         L2 = tf.nn.relu(BN2)
         L2 = tf.nn.max_pool(L2, ksize=[1, 2, 2, 1],
                             strides=[1, 2, 2, 1], padding='SAME')
@@ -275,7 +276,7 @@ def build_graph(feature, label, pos_weight):
         print('Y: ', Y)
     elif args.nnModel == "fcn":
         reg = 0.0001
-        X = tf.reshape(feature, [-1,445*14])
+        X = tf.reshape(feature, [-1,445*loadMat.specLength])
         Fc1 = tf.contrib.layers.fully_connected(inputs=X, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
         Fc2 = tf.contrib.layers.fully_connected(inputs=Fc1, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
         Fc3 = tf.contrib.layers.fully_connected(inputs=Fc2, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
@@ -285,7 +286,7 @@ def build_graph(feature, label, pos_weight):
         print('hypotht: ',hypothesis)
 
     elif args.nnModel =='single':
-        X = tf.reshape(feature, [-1,445*14])
+        X = tf.reshape(feature, [-1,445*loadMat.specLength])
         hypothesis = tf.contrib.layers.fully_connected(inputs=X, num_outputs=loadMat.velClassNum, activation_fn=tf.nn.relu)
 
 
@@ -442,13 +443,14 @@ else:
         for pieceIndex in range(len(fileList)):
             testMatName = args.testPath+'/'+fileList[pieceIndex].split('.mat')[0]
             pieceX, pieceY = loadMat.loadPiece(testMatName)
+            print(pieceX.shape, pieceY.shape)
             test_batch = int(ceil(pieceX.shape[0]/valid_batch_size))
             # print('number of test batch: ',test_batch)
-            result = np.empty([1, loadMat.velClassNum])
+            result = np.empty([0, loadMat.velClassNum])
             avg_pieceAccu = 0
             for i in range(test_batch):
                 batch_xs, batch_ys = pieceX[i * valid_batch_size:(i + 1) * valid_batch_size], pieceY[i * valid_batch_size:(i + 1) * valid_batch_size]
-                batch_xs = batch_xs.reshape([-1, 6230])
+                batch_xs = batch_xs.reshape([-1, 445*loadMat.specLength])
                 feed_dict = {X: batch_xs, Y: batch_ys, is_training: False}
                 # c, validAccu, validError = sess.run([cost, accuracy, mean_error], feed_dict=feed_dict)
                 pieceAccu, tempResult = sess.run([accuracy, hypothesis], feed_dict=feed_dict)
@@ -465,8 +467,9 @@ else:
             # print(velocity)
 
             sigma = sigma * sqrt(2)
+            vel_error = loadMat.calError(pieceY, result)
             print('Piece name is ', testMatName, 'and statistics are ', (mu, sigma))
-            print('Piece Accuracy:', pieceAccu)
+            print('Piece Accuracy:', pieceAccu, 'and mean velocity error is', vel_error)
 
             csv_name = fileList[pieceIndex].split('.mp3')[0] + '.csv'
             csv_dir = args.testPath + '/'
