@@ -9,6 +9,7 @@ import random
 import os
 
 velClassNum = 8
+specLength = 14
 
 def _bytes_feature(value):
     return tf.train.Feature(bytes_list=tf.train.BytesList(value=value))
@@ -79,7 +80,7 @@ def loadTrainSet(filename):
                     spec_array = np.transpose(np.asarray(mat_contents[spec_cell[j, dataSize]]))
                     if not spec_array.any():
                         break
-                    tempX = spec_array.reshape((445, 14))
+                    tempX = spec_array.reshape((445, specLength))
                     dataSetX.append(tempX/np.amax(tempX))
                     # dataSetX.append(tempX)
                     # dataSetY.append(np.asarray(vel_cel[setIndex, foldIndex][0, 2][i, j].reshape(1)))
@@ -105,7 +106,7 @@ def loadTrainSet(filename):
 
 def mergeMatFolder(path):
     fileList = os.listdir(path)
-    wholeFileX = np.empty([0, 445,14 ,1])
+    wholeFileX = np.empty([0, 445,specLength ,1])
     wholeFileY = np.empty([0, velClassNum])
     for matIndex in range(len(fileList)):
         pieceX, pieceY = loadPiece(path+'/'+fileList[matIndex])
@@ -139,7 +140,7 @@ def loadPiece(fileName):
     pieceY = []
     for i in range(pieceSetSize):
         # print(test_contents['onsetClusterArray'][0][i])
-        tempX = np.asarray(test_contents['onsetClusterArray'][0][i]).reshape((445, 14,1))
+        tempX = np.asarray(test_contents['onsetClusterArray'][0][i]).reshape((445, specLength,1))
         pieceX.append(tempX / np.amax(tempX))
         # pieceY.append(np.asarray(test_contents['onsetMatchedVel'][0][i]).reshape(1))
         pieceY.append(velocityToOneHot(test_contents['onsetMatchedVel'][0][i]).reshape(velClassNum))
@@ -263,9 +264,22 @@ def readExtInFolder(dir, ext):
     for f in fileList:
         if f.endswith('.'+  ext):
             extList.append(f)
+
+    extList.sort()
     return extList
+
+def calError(label, hypothesis):
+    label_vel = np.array(resultToVelocity(label))
+    result_vel = np.array(resultToVelocity(hypothesis))
+
+    error = np.abs(label_vel-result_vel)
+    mean_error = np.mean(error)
+
+    return mean_error
+
+
 
 
 
 if __name__ == '__main__':
-    convert_to('./synthogyTraining', 'dataSynthogyExtended')
+    convert_to('./mat4window', 'dataWindow4')
