@@ -449,7 +449,6 @@ else:
         for pieceIndex in range(len(fileList)):
             testMatName = args.testPath+'/'+fileList[pieceIndex].split('.mat')[0]
             pieceX, pieceY = loadMat.loadPiece(testMatName)
-            print(pieceX.shape, pieceY.shape)
             test_batch = int(ceil(pieceX.shape[0]/valid_batch_size))
             # print('number of test batch: ',test_batch)
             result = np.empty([0, loadMat.velClassNum])
@@ -468,12 +467,14 @@ else:
             # result =  sess.run(hypothesis, feed_dict={X: pieceX, Y: pieceY, is_training:False})
 
             # print("Result Value: ", result.shape)
-            velocity = loadMat.resultToVelocity(result)
+            # velocity = loadMat.resultToVelocity(result)
+            velocity = result
             mu, sigma = loadMat.velocityToStatistic(velocity)
             # print(velocity)
 
             sigma = sigma * sqrt(2)
-            vel_error = loadMat.calError(pieceY, result)
+            # vel_error = loadMat.calError(pieceY, result)
+            vel_error = np.mean(np.abs(pieceY-result))
             print('Piece name is ', testMatName, 'and statistics are ', (mu, sigma))
             print('Piece Accuracy:', pieceAccu, 'and mean velocity error is', vel_error)
 
