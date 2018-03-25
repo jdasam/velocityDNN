@@ -134,6 +134,7 @@ def unison_shuffled_copies(a,b):
     return a[p], b[p]
 
 def loadPiece(fileName):
+    print(fileName)
     test_contents = sio.loadmat(fileName)
     pieceSetSize = len(test_contents['onsetClusterArray'][0])
 
@@ -283,4 +284,4 @@ def calError(label, hypothesis):
 
 
 if __name__ == '__main__':
-    convert_to('./matSMDtrain', 'dataRegression')
+    convert_to('./matSynthogy', 'dataNewSynthogyRegression')

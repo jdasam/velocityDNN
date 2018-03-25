@@ -78,6 +78,8 @@ def initalizable_dataset(record_files, batch_size=128, num_threads=4):
 
 
 # hyper parameters
+dataSize = 281595
+training_size = dataSize * 0.7
 learning_rate = 0.0001
 training_epochs = 100
 batch_size = 512
@@ -276,9 +278,9 @@ def build_graph(feature, label, pos_weight):
         print('hypothesis: ', hypothesis)
         print('Y: ', Y)
     elif args.nnModel == "fcn":
-        reg = 0.0001
+        reg = 0.01
         X = tf.reshape(feature, [-1,445*loadMat.specLength])
-        Fc1 = tf.contrib.layers.fully_connected(inputs=X, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
+        Fc1 = tf.contrib.layers.fully_connected(inputs=X, num_outputs=512, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
         Fc2 = tf.contrib.layers.fully_connected(inputs=Fc1, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
         Fc3 = tf.contrib.layers.fully_connected(inputs=Fc2, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
         Fc4 = tf.contrib.layers.fully_connected(inputs=Fc3, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
@@ -376,8 +378,9 @@ if args.sessMode  == 'train':
             avg_validCost = 0
             avg_validError = 0
             avg_validGuess = 0
+            total_batch = int(training_size/batch_size)
             # total_batch = int(207817 *0.7 / batch_size)
-            total_batch = int(97021 *0.7 / batch_size)
+            # total_batch = int(97021 *0.7 / batch_size)
             # total_batch = int(95920 *0.8 / batch_size)
             # total_batch = int(194042 * 0.8 / batch_size)
             t= time.time()
