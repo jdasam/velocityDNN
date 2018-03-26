@@ -282,4 +282,5 @@ def calError(label, hypothesis):
 
 
 if __name__ == '__main__':
-    convert_to('./mat4window', 'dataWindow4')
+    convert_to('./matSMDr12Window2', 'dataSMDr12w4')
+

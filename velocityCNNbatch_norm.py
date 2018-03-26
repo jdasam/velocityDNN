@@ -77,7 +77,9 @@ def initalizable_dataset(record_files, batch_size=128, num_threads=4):
 
 
 # hyper parameters
-learning_rate = 0.0001
+data_size = 104482
+training_ratio = 0.7
+learning_rate = 0.0005
 training_epochs = 100
 batch_size = 512
 valid_batch_size = 512
@@ -277,11 +279,14 @@ def build_graph(feature, label, pos_weight):
     elif args.nnModel == "fcn":
         reg = 0.0001
         X = tf.reshape(feature, [-1,445*loadMat.specLength])
-        Fc1 = tf.contrib.layers.fully_connected(inputs=X, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
-        Fc2 = tf.contrib.layers.fully_connected(inputs=Fc1, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
+        Fc1 = tf.contrib.layers.fully_connected(inputs=X, num_outputs=512, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
+        Fc2 = tf.contrib.layers.fully_connected(inputs=Fc1, num_outputs=512, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
         Fc3 = tf.contrib.layers.fully_connected(inputs=Fc2, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
         Fc4 = tf.contrib.layers.fully_connected(inputs=Fc3, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
         Fc5 = tf.contrib.layers.fully_connected(inputs=Fc4, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
+        # Fc6 = tf.contrib.layers.fully_connected(inputs=Fc5, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
+        # Fc7 = tf.contrib.layers.fully_connected(inputs=Fc6, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
+
         hypothesis = tf.contrib.layers.fully_connected(inputs=Fc5, num_outputs=loadMat.velClassNum, activation_fn=tf.nn.relu)
         print('hypotht: ',hypothesis)
 
@@ -304,7 +309,7 @@ def build_graph(feature, label, pos_weight):
     weighted_cross_entropy = tf.losses.compute_weighted_loss(cross_entropy, pos_weight)
     cost = tf.reduce_mean(weighted_cross_entropy)
     # cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(
-        # logits=hypothesis, labels=Y))
+    #     logits=hypothesis, labels=Y))
     # cost = tf.reduce_mean(tf.square(hypothesis - Y))
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
 
@@ -340,6 +345,9 @@ pred2 = tf.reduce_mean(tf.cast(tf.less_equal(tf.abs(tf.argmax(hypothesis, 1) - t
 pred3 = tf.reduce_mean(tf.abs(tf.argmax(hypothesis, 1) - tf.argmax(Y, 1)))
 accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
+# accuracy = tf.reduce_mean(tf.cast(tf.less_equal(tf.abs(Y-hypothesis), 5),tf.float32 ) )
+
+
 # c = tf.ConfigProto()
 # c.gpu_options.visible_device_list = str(1)
 # c.gpu_options.allow_growth = True
@@ -358,7 +366,7 @@ if args.sessMode  == 'train':
         valid_handle = sess.run(valid_iterator.string_handle())
         test_handle = sess.run(test_iterator.string_handle())
 
-        former_validation_cost = 100
+        former_validation_cost = np.inf
         stop_patience = 0
         patience_limit = 5
 
@@ -370,8 +378,9 @@ if args.sessMode  == 'train':
             avg_validCost = 0
             avg_validError = 0
             avg_validGuess = 0
+            total_batch = int(data_size * training_ratio / batch_size)
             # total_batch = int(207817 *0.7 / batch_size)
-            total_batch = int(97021 *0.7 / batch_size)
+            # total_batch = int(97021 *0.7 / batch_size)
             # total_batch = int(95920 *0.8 / batch_size)
             # total_batch = int(194042 * 0.8 / batch_size)
             t= time.time()
@@ -419,7 +428,7 @@ if args.sessMode  == 'train':
 
 
             if epoch > training_epochs/10:
-                if former_validation_cost < avg_validCost and avg_validCost > avg_cost:
+                if former_validation_cost < avg_validCost:
                     stop_patience += 1
 
                     if stop_patience == patience_limit:
@@ -443,7 +452,6 @@ else:
         for pieceIndex in range(len(fileList)):
             testMatName = args.testPath+'/'+fileList[pieceIndex].split('.mat')[0]
             pieceX, pieceY = loadMat.loadPiece(testMatName)
-            print(pieceX.shape, pieceY.shape)
             test_batch = int(ceil(pieceX.shape[0]/valid_batch_size))
             # print('number of test batch: ',test_batch)
             result = np.empty([0, loadMat.velClassNum])
