@@ -31,7 +31,7 @@ args = parser.parse_args()
 
 # python ~.py -mode=test
 # pos_weight_list = tf.constant([3.0, 1.5, 1.0, 0.5, 0.5, 1.0, 1.5, 3.0 ])
-pos_weight_list = tf.constant([3.5, 2.0, 1.0, 0.4, 0.4, 1.0, 2.0, 3.5])
+pos_weight_list = tf.constant([2, 1.5, 1.0, 0.7, 0.7, 1.0, 1.5, 2])
 
 
 def _parse_function(example_proto):
@@ -77,9 +77,9 @@ def initalizable_dataset(record_files, batch_size=128, num_threads=4):
 
 
 # hyper parameters
-data_size = 104482
+data_size = 95920
 training_ratio = 0.7
-learning_rate = 0.0005
+learning_rate = 0.0001
 training_epochs = 100
 batch_size = 512
 valid_batch_size = 512
@@ -277,10 +277,10 @@ def build_graph(feature, label, pos_weight):
         print('hypothesis: ', hypothesis)
         print('Y: ', Y)
     elif args.nnModel == "fcn":
-        reg = 0.0001
+        reg = 0.001
         X = tf.reshape(feature, [-1,445*loadMat.specLength])
-        Fc1 = tf.contrib.layers.fully_connected(inputs=X, num_outputs=512, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
-        Fc2 = tf.contrib.layers.fully_connected(inputs=Fc1, num_outputs=512, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
+        Fc1 = tf.contrib.layers.fully_connected(inputs=X, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
+        Fc2 = tf.contrib.layers.fully_connected(inputs=Fc1, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
         Fc3 = tf.contrib.layers.fully_connected(inputs=Fc2, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
         Fc4 = tf.contrib.layers.fully_connected(inputs=Fc3, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
         Fc5 = tf.contrib.layers.fully_connected(inputs=Fc4, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
@@ -288,7 +288,7 @@ def build_graph(feature, label, pos_weight):
         # Fc7 = tf.contrib.layers.fully_connected(inputs=Fc6, num_outputs=256, activation_fn=tf.nn.selu, weights_regularizer = tf.contrib.layers.l2_regularizer(scale=reg))
 
         hypothesis = tf.contrib.layers.fully_connected(inputs=Fc5, num_outputs=loadMat.velClassNum, activation_fn=tf.nn.relu)
-        print('hypotht: ',hypothesis)
+        print('hypothesis: ',hypothesis)
 
     elif args.nnModel =='single':
         X = tf.reshape(feature, [-1,445*loadMat.specLength])
@@ -448,10 +448,12 @@ else:
         # fileList = os.listdir(args.testPath)
         fileList = loadMat.readExtInFolder(args.testPath, 'mat')
         totalStat = []
+        total_mean_error = 0
+        total_std_error = 0
         print('File List: ', fileList)
         for pieceIndex in range(len(fileList)):
             testMatName = args.testPath+'/'+fileList[pieceIndex].split('.mat')[0]
-            pieceX, pieceY = loadMat.loadPiece(testMatName)
+            pieceX, pieceY, pieceGain, pieceVel = loadMat.loadPiece(testMatName)
             test_batch = int(ceil(pieceX.shape[0]/valid_batch_size))
             # print('number of test batch: ',test_batch)
             result = np.empty([0, loadMat.velClassNum])
@@ -470,14 +472,16 @@ else:
             # result =  sess.run(hypothesis, feed_dict={X: pieceX, Y: pieceY, is_training:False})
 
             # print("Result Value: ", result.shape)
+            gt_mu, gt_sigma = loadMat.velocityToStatistic(pieceVel)
+            gt_sigma = gt_sigma * sqrt(2)
             velocity = loadMat.resultToVelocity(result)
             mu, sigma = loadMat.velocityToStatistic(velocity)
             # print(velocity)
 
             sigma = sigma * sqrt(2)
             vel_error = loadMat.calError(pieceY, result)
-            print('Piece name is ', testMatName, 'and statistics are ', (mu, sigma))
-            print('Piece Accuracy:', pieceAccu, 'and mean velocity error is', vel_error)
+            # print('Piece name is ', testMatName, 'and statistics are ', (mu, sigma))
+            # print('Piece Accuracy:', pieceAccu, 'and mean velocity error is', vel_error)
 
             csv_name = fileList[pieceIndex].split('.mp3')[0] + '.csv'
             csv_dir = args.testPath + '/'
@@ -487,13 +491,35 @@ else:
             csv_file.close()
             totalStat.append(mu)
             totalStat.append(sigma)
+
+            convertedVel = loadMat.convertGainToVel(pieceGain, mu, sigma/sqrt(2))
+            # print(np.mean(convertedVel), np.std(convertedVel)*sqrt(2))
+            pieceVel = pieceVel.reshape([pieceVel.shape[0],])
+            # print(convertedVel)
+            # print(convertedVel.shape, pieceVel.shape)
+
+            conv_vel_error = np.mean(np.abs(np.subtract(convertedVel, pieceVel )))
+            # print(conv_vel_error.shape)
+            # print(np.abs(np.subtract(convertedVel, pieceVel )))
+            # print(pieceGain)
+
+            # print('Converted Velocity Error: ', conv_vel_error)
+
+            total_mean_error += abs(mu-gt_mu)
+            total_std_error += abs(sigma-gt_sigma)
+
+            print('Piece name is ', testMatName, 'and statistics are ', (mu, sigma), ', stat error is:', (mu-gt_mu, sigma-gt_sigma) )
+            print('Piece Accuracy:', pieceAccu, 'and mean velocity error is', conv_vel_error)
+
+
+
         csv_name ='totalStat.csv'
         csv_dir = args.testPath + '/'
         csv_file = open(csv_dir + csv_name, 'w')
         csv_writer = csv.writer(csv_file)
         csv_writer.writerow(totalStat)
         csv_file.close()
-
+        print(total_mean_error/len(fileList), total_std_error/len(fileList))
 # print(result)
 
 

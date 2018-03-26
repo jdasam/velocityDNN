@@ -138,16 +138,23 @@ def loadPiece(fileName):
 
     pieceX = []
     pieceY = []
+    pieceGain = []
+    pieceVel = []
     for i in range(pieceSetSize):
         # print(test_contents['onsetClusterArray'][0][i])
         tempX = np.asarray(test_contents['onsetClusterArray'][0][i]).reshape((445, specLength,1))
+        tempGain = np.max(np.sum(tempX, axis=0))
         pieceX.append(tempX / np.amax(tempX))
+        pieceGain.append(math.log(tempGain))
         # pieceY.append(np.asarray(test_contents['onsetMatchedVel'][0][i]).reshape(1))
         pieceY.append(velocityToOneHot(test_contents['onsetMatchedVel'][0][i]).reshape(velClassNum))
+        pieceVel.append(np.asarray(test_contents['onsetMatchedVel'][0][i]).reshape(1))
 
     pieceX = np.asarray(pieceX)
     pieceY = np.asarray(pieceY)
-    return pieceX, pieceY
+    pieceGain = np.asarray(pieceGain)
+    pieceVel = np.asarray(pieceVel)
+    return pieceX, pieceY, pieceGain, pieceVel
 
 
 def velocityToOneHot(velocity):
@@ -276,6 +283,21 @@ def calError(label, hypothesis):
     mean_error = np.mean(error)
 
     return mean_error
+
+
+def convertGainToVel(pieceGain, velMean, velStd):
+    gainMu, gainSigma =  norm.fit(pieceGain)
+
+    coefA = velStd / gainSigma
+    coefB = velMean - coefA * gainMu
+
+    convertedVel = np.add(np.multiply(pieceGain, coefA), coefB)
+    convertedVel = np.around(convertedVel)
+    convertedVel[convertedVel <0 ]= 0
+    convertedVel[convertedVel >127] =127
+
+    return convertedVel
+
 
 
 
